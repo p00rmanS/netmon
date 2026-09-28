@@ -1,0 +1,29 @@
+# Devices NetMon watches. Edit this file, then restart NetMon.
+#
+#   type:  router | switch | ap | printer | pos | internet
+#   check: ping | tcp   (tcp needs a port)
+#
+# Each device's name must be unique: it's how NetMon matches this file
+# to the history it has already stored.
+
+devices:
+  - name: Main Router
+    type: router
+    ip: 192.168.50.1
+    check: ping
+
+  - name: Router Admin Page
+    type: router
+    ip: 192.168.50.1
+    check: tcp
+    port: 80
+
+  - name: Xiaomi Pad (test POS)
+    type: pos
+    ip: 192.168.50.37
+    check: ping
+
+  - name: Internet (Cloudflare)
+    type: internet
+    ip: 1.1.1.1
+    check: ping
