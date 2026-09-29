@@ -121,7 +121,29 @@ class Database:
             self._conn.execute(
                 f"UPDATE devices SET active = 0 WHERE name NOT IN ({placeholders})", names
             )
+            # A removed device can't recover, so don't leave its incident "ongoing" forever.
+            self._conn.execute(
+                """UPDATE incidents SET resolved_at = ?
+                   WHERE resolved_at IS NULL
+                     AND device_id IN (SELECT id FROM devices WHERE active = 0)""",
+                (now,),
+            )
         return self.active_devices()
+
+    def rename_device(self, device_id: int, new_name: str) -> None:
+        """Rename a device in place so it keeps its id and history.
+
+        Raises ValueError if another device (even a removed one) has the name.
+        """
+        with self._lock, self._conn:
+            self._conn.execute("BEGIN")
+            clash = self._conn.execute(
+                "SELECT active FROM devices WHERE name = ? AND id != ?", (new_name, device_id)
+            ).fetchone()
+            if clash is not None:
+                which = "another device" if clash["active"] else "a previously removed device"
+                raise ValueError(f"the name {new_name!r} is already used by {which}")
+            self._conn.execute("UPDATE devices SET name = ? WHERE id = ?", (new_name, device_id))
 
     def active_devices(self) -> list[DeviceRow]:
         with self._lock:

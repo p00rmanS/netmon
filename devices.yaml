@@ -1,7 +1,8 @@
-# Devices NetMon watches. Edit this file, then restart NetMon.
+# Devices NetMon watches. Edit from the dashboard ("Manage devices") or by
+# hand here. After a hand edit, restart NetMon.
 #
 #   type:  router | switch | ap | printer | pos | internet
-#   check: ping | tcp   (tcp needs a port)
+#   check: ping | tcp   (tcp needs a port; 9100 for most receipt printers)
 #
 # Each device's name must be unique: it's how NetMon matches this file
 # to the history it has already stored.

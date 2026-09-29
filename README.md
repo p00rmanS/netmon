@@ -49,6 +49,31 @@ else on your computer is affected.
 
 ## 2. Tell NetMon which devices to watch
 
+### The easy way: from the dashboard
+
+Start NetMon (step 3), open <http://localhost:8000> **on the NetMon computer**,
+and click **Manage devices** (top right).
+
+- **+ Add device**: fill in a name, type and IP address.
+  Receipt printers are set to *TCP port 9100* automatically; everything else uses *Ping*.
+- Click **Test** to check that the device answers *before* saving.
+- **Save**. The device appears straight away and is checked immediately.
+- **Edit** changes a device (renaming keeps its history); **Remove** stops monitoring it.
+
+Changes are saved into `devices.yaml` for you, with no restart needed.
+
+> For safety, devices can only be changed from the NetMon computer itself.
+> Phones and other computers (with `--lan`) can view the dashboard but not
+> change anything, and other websites can't change it through your browser.
+
+**Finding a device's IP address:** print a printer's self-test page (usually:
+hold the feed button while switching it on), or look at the list of connected
+devices in your router's admin page. In the router, also turn on **IP
+reservation** for each monitored device so its address never changes;
+otherwise NetMon will be checking the wrong address after a router restart.
+
+### By hand: editing devices.yaml
+
 Open **`devices.yaml`** in any text editor (Notepad is fine). Each device looks like this:
 
 ```yaml
@@ -66,9 +91,12 @@ tells you which device and what to fix when it starts.
 - Most devices: use `check: ping`.
 - Receipt printers often ignore ping. Use `check: tcp` with `port: 9100`.
 - Keep the `Internet (Cloudflare)` entry. It tells you if the internet itself is down.
-- If you remove a device from the file, its history is kept. It just stops being shown.
+- If you remove a device, its history is kept. It just stops being shown, and
+  adding it back with the same name brings the history back.
 
-Restart NetMon after editing the file.
+Restart NetMon after editing the file by hand. (Changes made from the
+dashboard don't need a restart.) Saving from the dashboard rewrites the file
+neatly, so any extra comments you typed into it will be replaced.
 
 ## 3. Start NetMon
 
@@ -163,4 +191,6 @@ to start fresh (with NetMon stopped).
 | `static/index.html` | The dashboard |
 
 API: `GET /api/devices`, `GET /api/devices/{id}/history?hours=24`,
-`GET /api/incidents?limit=50`.
+`GET /api/incidents?limit=50`, `GET /api/meta`.
+Editing (from the NetMon computer only): `POST /api/devices`,
+`PUT /api/devices/{id}`, `DELETE /api/devices/{id}`, `POST /api/check` (test without saving).

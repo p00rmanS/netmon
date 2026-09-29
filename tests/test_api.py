@@ -16,9 +16,11 @@ def client(tmp_path):
         "  - {name: Printer, type: printer, ip: 10.0.0.2, check: tcp, port: 9100}\n",
         encoding="utf-8",
     )
-    app = create_app(cfg, tmp_path / "t.db", start_background=False)
+    app = create_app(cfg, tmp_path / "t.db", start_background=False, edit_hosts=("testclient",))
     with TestClient(app) as c:
         c.monitor = app.state.monitor
+        c.db = app.state.db
+        c.cfg = cfg
         yield c
 
 

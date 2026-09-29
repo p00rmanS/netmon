@@ -128,19 +128,40 @@ class Monitor:
         self.db = db
         self.interval_s = interval_s
         self.threshold = threshold
-        self.devices: dict[int, DeviceRuntime] = {}
-        now = time.time()
-        max_age = interval_s * (threshold + 2)
+        self.devices: dict[int, DeviceRuntime] = {d.id: self._load_runtime(d) for d in devices}
+
+    def _load_runtime(self, d: DeviceRow) -> DeviceRuntime:
+        """Build a device's runtime state from what the database remembers."""
+        recent = self.db.recent_checks(d.id, self.threshold + 1)
+        state = restore_state(
+            self.db.open_incident_start(d.id), [(ts, ok) for ts, ok, _ in recent],
+            time.time(), self.interval_s * (self.threshold + 2), self.threshold,
+        )
+        rt = DeviceRuntime(device=d, state=state)
+        if recent:
+            rt.last_checked, rt.last_is_up, rt.last_latency_ms = recent[0]
+        return rt
+
+    def reload(self, devices: list[DeviceRow]) -> list[int]:
+        """Switch to a new device list while running; return ids that need a check now.
+
+        Unchanged devices keep their state. A device whose address or check
+        changed keeps its status too (so an open incident can close as soon
+        as the corrected address answers) but is re-checked immediately.
+        """
+        needs_check = []
+        new: dict[int, DeviceRuntime] = {}
         for d in devices:
-            recent = db.recent_checks(d.id, threshold + 1)
-            state = restore_state(
-                db.open_incident_start(d.id), [(ts, ok) for ts, ok, _ in recent],
-                now, max_age, threshold,
-            )
-            rt = DeviceRuntime(device=d, state=state)
-            if recent:
-                rt.last_checked, rt.last_is_up, rt.last_latency_ms = recent[0]
-            self.devices[d.id] = rt
+            rt = self.devices.get(d.id)
+            if rt is None:
+                rt = self._load_runtime(d)
+                needs_check.append(d.id)
+            elif (rt.device.ip, rt.device.check_method, rt.device.port) != (d.ip, d.check_method, d.port):
+                needs_check.append(d.id)
+            rt.device = d
+            new[d.id] = rt
+        self.devices = new
+        return needs_check
 
     def record(self, device_id: int, result: CheckResult, at: float) -> Event | None:
         """Apply one check result: persist it, then update in-memory state.
@@ -165,15 +186,17 @@ class Monitor:
             log.info("%s is back UP", rt.device.name)
         return event
 
-    async def check_all(self) -> None:
-        """Check every device concurrently, then record the results."""
-        runtimes = list(self.devices.values())
+    async def check_all(self, ids: list[int] | None = None) -> None:
+        """Check every device (or just `ids`) concurrently, then record the results."""
+        runtimes = [rt for rt in self.devices.values() if ids is None or rt.device.id in ids]
         at = time.time()
         results = await asyncio.gather(
             *(run_check(rt.device.check_method, rt.device.ip, rt.device.port) for rt in runtimes),
             return_exceptions=True,
         )
         for rt, result in zip(runtimes, results):
+            if self.devices.get(rt.device.id) is not rt:
+                continue  # removed while its check was running
             if isinstance(result, BaseException):
                 # A bug, not a network failure: don't count it against the device.
                 log.error("check crashed for %s: %r", rt.device.name, result)

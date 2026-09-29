@@ -41,6 +41,7 @@
     }
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body {
     margin: 0;
     background: var(--bg);
@@ -121,13 +122,50 @@
   .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-top: 8px; }
   .legend .fail { color: var(--down); font-weight: 600; }
   .chart-msg { color: var(--muted); padding: 40px 0; text-align: center; }
+
+  /* ---------- manage devices ---------- */
+  .head-right { display: flex; align-items: center; gap: 12px; }
+  .btn {
+    font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
+    padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text);
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn:disabled { opacity: .55; cursor: default; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.danger { color: var(--down); }
+  .btn.small { font-size: 13px; padding: 5px 10px; }
+  .dev-list { list-style: none; margin: 0 0 14px; padding: 0; border: 1px solid var(--border); border-radius: 10px; }
+  .dev-list li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 1px solid var(--border); }
+  .dev-list li:first-child { border-top: 0; }
+  .dev-list .grow { flex: 1; min-width: 0; }
+  .dev-list .actions { display: flex; gap: 6px; flex: none; }
+  .form { display: grid; gap: 12px; }
+  .form label { display: grid; gap: 4px; font-size: 13px; font-weight: 600; color: var(--muted); }
+  .form input, .form select {
+    font: inherit; font-size: 16px; /* 16px stops phones zooming in */
+    padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); width: 100%;
+  }
+  .form input:focus, .form select:focus { outline: 2px solid var(--accent); outline-offset: 0; }
+  .form .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .form .hint { font-weight: 400; font-size: 12px; }
+  .form-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .form-actions .spacer { flex: 1; }
+  .msg { font-size: 14px; min-height: 1.45em; }
+  .msg.ok { color: var(--up); }
+  .msg.err { color: var(--down); }
+  .msg.info { color: var(--muted); }
 </style>
 </head>
 <body>
 <main>
   <header>
     <h1>NetMon</h1>
-    <span class="updated" id="updated">Loading…</span>
+    <div class="head-right">
+      <span class="updated" id="updated">Loading…</span>
+      <button class="btn small" id="manage-btn" hidden>Manage devices</button>
+    </div>
   </header>
   <div class="banner" id="banner">Can't reach NetMon. Showing the last known status.</div>
 
@@ -148,6 +186,62 @@
   <div class="dlg-body">
     <div class="chart-wrap"><canvas id="chart"></canvas><div class="chart-msg" id="chart-msg" hidden></div></div>
     <div class="legend" id="legend"></div>
+  </div>
+</dialog>
+
+<dialog id="manage">
+  <div class="dlg-head">
+    <span class="icon" aria-hidden="true">⚙️</span>
+    <h3 id="manage-title">Manage devices</h3>
+    <button class="close" id="manage-close" aria-label="Close">✕</button>
+  </div>
+  <div class="dlg-body">
+    <!-- list view -->
+    <div id="manage-list-view">
+      <ul class="dev-list" id="dev-list"></ul>
+      <div class="form-actions">
+        <button class="btn primary" id="add-btn">+ Add device</button>
+        <span class="msg" id="list-msg"></span>
+      </div>
+    </div>
+
+    <!-- add / edit form -->
+    <form class="form" id="dev-form" hidden novalidate>
+      <label>Name
+        <input id="f-name" maxlength="60" required placeholder="e.g. Kitchen Printer" autocomplete="off">
+      </label>
+      <label>Type
+        <select id="f-type">
+          <option value="printer">🧾 Receipt printer</option>
+          <option value="pos">💳 POS / tablet</option>
+          <option value="router">📡 Router</option>
+          <option value="switch">🔀 Switch</option>
+          <option value="ap">📶 Wi-Fi access point</option>
+          <option value="internet">🌐 Internet</option>
+        </select>
+      </label>
+      <label>IP address
+        <input id="f-ip" required placeholder="e.g. 192.168.50.60" inputmode="decimal" autocomplete="off">
+      </label>
+      <div class="row2">
+        <label>Check with
+          <select id="f-check">
+            <option value="ping">Ping</option>
+            <option value="tcp">TCP port</option>
+          </select>
+        </label>
+        <label id="f-port-wrap">Port
+          <input id="f-port" type="number" min="1" max="65535" inputmode="numeric" placeholder="9100">
+        </label>
+      </div>
+      <div class="msg" id="form-msg"></div>
+      <div class="form-actions">
+        <button type="button" class="btn" id="test-btn">Test</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" id="cancel-btn">Cancel</button>
+        <button type="submit" class="btn primary" id="save-btn">Save</button>
+      </div>
+    </form>
   </div>
 </dialog>
 
@@ -411,6 +505,178 @@ $("dlg-close").addEventListener("click", closeDetail);
 $("detail").addEventListener("close", () => { openDeviceId = null; if (chart) { chart.destroy(); chart = null; } });
 $("detail").addEventListener("click", (e) => { if (e.target === $("detail")) closeDetail(); });
 
+// ------------------------------------------------------------ manage devices
+
+let editingId = null; // null while adding a new device
+
+async function sendJSON(method, url, body) {
+  const r = await fetch(url, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (r.status === 204) return null;
+  let data = null;
+  try { data = await r.json(); } catch { /* no body */ }
+  if (!r.ok) {
+    let msg = data && data.detail;
+    if (Array.isArray(msg)) msg = msg.map((e) => e.msg).join("; ");
+    throw new Error(msg || `Request failed (HTTP ${r.status})`);
+  }
+  return data;
+}
+
+function setMsg(id, text, kind) {
+  const el = $(id);
+  el.textContent = text || "";
+  el.className = `msg ${kind || ""}`;
+}
+
+function renderDevList() {
+  const list = [...devices].sort((a, b) => a.name.localeCompare(b.name));
+  $("dev-list").innerHTML = list.length
+    ? list.map((d) => `
+        <li>
+          <span class="icon" aria-hidden="true">${ICONS[d.type] || "❔"}</span>
+          <div class="grow">
+            <div class="name">${esc(d.name)}</div>
+            <div class="ip">${esc(d.check_method === "tcp" ? `${d.ip} · TCP ${d.port}` : `${d.ip} · ping`)}</div>
+          </div>
+          <div class="actions">
+            <button class="btn small" data-edit="${d.id}">Edit</button>
+            <button class="btn small danger" data-remove="${d.id}">Remove</button>
+          </div>
+        </li>`).join("")
+    : `<li class="empty">No devices yet. Add your first one.</li>`;
+}
+
+function showList() {
+  editingId = null;
+  $("manage-title").textContent = "Manage devices";
+  $("dev-form").hidden = true;
+  $("manage-list-view").hidden = false;
+  renderDevList();
+}
+
+function syncPortField() {
+  $("f-port-wrap").style.visibility = $("f-check").value === "tcp" ? "visible" : "hidden";
+}
+
+function showForm(d) {
+  editingId = d ? d.id : null;
+  $("manage-title").textContent = d ? `Edit ${d.name}` : "Add device";
+  $("f-name").value = d ? d.name : "";
+  $("f-type").value = d ? d.type : "printer";
+  $("f-ip").value = d ? d.ip : "";
+  $("f-check").value = d ? d.check_method : "tcp";
+  $("f-port").value = d ? (d.port ?? "") : "9100";
+  syncPortField();
+  setMsg("form-msg", "");
+  $("manage-list-view").hidden = true;
+  $("dev-form").hidden = false;
+  $("f-name").focus();
+}
+
+function formValues() {
+  const check = $("f-check").value;
+  const port = $("f-port").value.trim();
+  return {
+    name: $("f-name").value,
+    type: $("f-type").value,
+    ip: $("f-ip").value.trim(),
+    check,
+    port: check === "tcp" && port !== "" ? Number(port) : null,
+  };
+}
+
+// Sensible defaults: printers are checked on port 9100, everything else by ping.
+$("f-type").addEventListener("change", () => {
+  if (editingId !== null) return; // don't change an existing device's check behind the user's back
+  const printer = $("f-type").value === "printer";
+  $("f-check").value = printer ? "tcp" : "ping";
+  if (printer && !$("f-port").value) $("f-port").value = "9100";
+  syncPortField();
+});
+$("f-check").addEventListener("change", () => {
+  if ($("f-check").value === "tcp" && !$("f-port").value && $("f-type").value === "printer") {
+    $("f-port").value = "9100";
+  }
+  syncPortField();
+});
+
+$("test-btn").addEventListener("click", async () => {
+  const { ip, check, port } = formValues();
+  const btn = $("test-btn");
+  btn.disabled = true;
+  setMsg("form-msg", "Testing…", "info");
+  try {
+    const r = await sendJSON("POST", "/api/check", { ip, check, port });
+    if (r.is_up) {
+      setMsg("form-msg", `✓ It answered in ${fmtLatency(r.latency_ms)}.`, "ok");
+    } else {
+      setMsg("form-msg",
+        `✕ No answer (${r.error || "failed"}). Check the IP address` +
+        (check === "tcp" ? " and port" : "") + ", and that the device is switched on.", "err");
+    }
+  } catch (err) {
+    setMsg("form-msg", err.message, "err");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("dev-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = $("save-btn");
+  btn.disabled = true;
+  setMsg("form-msg", "Saving…", "info");
+  try {
+    const body = formValues();
+    const saved = editingId === null
+      ? await sendJSON("POST", "/api/devices", body)
+      : await sendJSON("PUT", `/api/devices/${editingId}`, body);
+    await refresh();
+    showList();
+    setMsg("list-msg", `Saved "${saved.name}". Checking it now…`, "ok");
+    setTimeout(refresh, 3000); // pick up the first check result quickly
+  } catch (err) {
+    setMsg("form-msg", err.message, "err");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+$("dev-list").addEventListener("click", async (e) => {
+  const editId = e.target.dataset.edit, removeId = e.target.dataset.remove;
+  if (editId) {
+    showForm(devices.find((d) => d.id === Number(editId)));
+  } else if (removeId) {
+    const d = devices.find((x) => x.id === Number(removeId));
+    if (!d || !confirm(`Remove "${d.name}"?\n\nIt will stop being monitored. Its history is kept, ` +
+                       `and adding it back with the same name brings the history back.`)) return;
+    try {
+      await sendJSON("DELETE", `/api/devices/${d.id}`);
+      await refresh();
+      renderDevList();
+      setMsg("list-msg", `Removed "${d.name}".`, "ok");
+    } catch (err) {
+      setMsg("list-msg", err.message, "err");
+    }
+  }
+});
+
+$("manage-btn").addEventListener("click", () => {
+  setMsg("list-msg", "");
+  showList();
+  $("manage").showModal();
+});
+$("add-btn").addEventListener("click", () => showForm(null));
+$("cancel-btn").addEventListener("click", showList);
+$("manage-close").addEventListener("click", () => $("manage").close());
+
+// Only the NetMon computer itself may change devices; phones just view.
+getJSON("/api/meta").then((m) => { $("manage-btn").hidden = !m.can_edit; }).catch(() => {});
+
 // ------------------------------------------------------------ refresh loop
 
 async function refresh() {
@@ -424,6 +690,7 @@ async function refresh() {
     renderGrid();
     renderIncidents(incs);
     if (openDeviceId != null) loadChart(openDeviceId);
+    if ($("manage").open && !$("manage-list-view").hidden) renderDevList();
   } catch (err) {
     console.error(err);
     $("banner").classList.add("show");
