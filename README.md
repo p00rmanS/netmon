@@ -220,6 +220,15 @@ to start fresh (with NetMon stopped).
 | `netmon/main.py` | Web server, API and startup |
 | `static/index.html` | The dashboard |
 
+### The website (GitHub Pages)
+
+`site/` holds the public landing page and `site/demo-api.js`, which fakes the
+API with simulated devices so the real dashboard runs without a server.
+`python scripts/build_site.py` builds everything into `_site/`; on every push
+to `main`, `.github/workflows/pages.yml` runs the tests and publishes it.
+The website is only a demo: real monitoring always runs on the restaurant's
+own network.
+
 API: `GET /api/devices`, `GET /api/devices/{id}/history?hours=24`,
 `GET /api/incidents?limit=50`, `GET /api/meta`.
 Editing (from the NetMon computer only): `POST /api/devices`,
