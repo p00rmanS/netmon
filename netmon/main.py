@@ -7,6 +7,7 @@ import asyncio
 import contextlib
 import logging
 import re
+import shutil
 import time
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -324,6 +325,11 @@ def main() -> None:
     args = p.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    config = Path(args.config)
+    example = PROJECT_ROOT / "devices.example.yaml"
+    if not config.exists() and example.exists():
+        shutil.copyfile(example, config)  # first run: start from the example list
+        print(f"Created {config.name} from the example. Edit it, or use 'Manage devices' on the dashboard.")
     try:
         load_devices(args.config)  # fail fast with a readable message
     except ConfigError as e:

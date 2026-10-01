@@ -10,19 +10,14 @@
 devices:
   - name: Main Router
     type: router
-    ip: 192.168.50.1
+    ip: 192.168.1.1
     check: ping
 
-  - name: Router Admin Page
-    type: router
-    ip: 192.168.50.1
+  - name: Kitchen Printer
+    type: printer
+    ip: 192.168.1.50
     check: tcp
-    port: 80
-
-  - name: Xiaomi Pad (test POS)
-    type: pos
-    ip: 192.168.50.37
-    check: ping
+    port: 9100
 
   - name: Internet (Cloudflare)
     type: internet

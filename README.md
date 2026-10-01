@@ -49,6 +49,9 @@ else on your computer is affected.
 
 ## 2. Tell NetMon which devices to watch
 
+The first time NetMon starts, it creates `devices.yaml` with three example
+devices. Replace them with your own in either of these ways.
+
 ### The easy way: from the dashboard
 
 Start NetMon (step 3), open <http://localhost:8000> **on the NetMon computer**,
