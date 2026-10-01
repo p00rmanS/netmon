@@ -12,6 +12,7 @@ import logging
 import time
 from dataclasses import dataclass
 from enum import Enum
+from typing import Callable
 
 from .checker import CheckResult, run_check
 from .db import Database, DeviceRow
@@ -108,6 +109,10 @@ def restore_state(
 
 # ---------------------------------------------------------------- runtime
 
+# Called once per status change: (name, type, ip, event, at, started_at), where
+# started_at is when the failures began (the incident's start).
+EventHandler = Callable[[str, str, str, Event, float, "float | None"], None]
+
 @dataclass
 class DeviceRuntime:
     device: DeviceRow
@@ -124,10 +129,12 @@ class Monitor:
         devices: list[DeviceRow],
         interval_s: float = CHECK_INTERVAL_S,
         threshold: int = FAILURE_THRESHOLD,
+        on_event: EventHandler | None = None,
     ):
         self.db = db
         self.interval_s = interval_s
         self.threshold = threshold
+        self.on_event = on_event
         self.devices: dict[int, DeviceRuntime] = {d.id: self._load_runtime(d) for d in devices}
 
     def _load_runtime(self, d: DeviceRow) -> DeviceRuntime:
@@ -170,7 +177,8 @@ class Monitor:
         the transition is retried on the next check instead of being lost.
         """
         rt = self.devices[device_id]
-        new_state, event = apply_check(rt.state, result.is_up, at, self.threshold)
+        old_state = rt.state
+        new_state, event = apply_check(old_state, result.is_up, at, self.threshold)
         self.db.record_check(
             device_id, at, result.is_up, result.latency_ms,
             open_incident_at=new_state.first_failure_at if event is Event.WENT_DOWN else None,
@@ -184,6 +192,12 @@ class Monitor:
             log.warning("%s is DOWN (%d failed checks)", rt.device.name, new_state.consecutive_failures)
         elif event is Event.CAME_UP:
             log.info("%s is back UP", rt.device.name)
+        if event is not None and self.on_event is not None:
+            started = (new_state if event is Event.WENT_DOWN else old_state).first_failure_at
+            try:
+                self.on_event(rt.device.name, rt.device.type, rt.device.ip, event, at, started)
+            except Exception:
+                log.exception("event handler failed for %s", rt.device.name)
         return event
 
     async def check_all(self, ids: list[int] | None = None) -> None:

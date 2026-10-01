@@ -147,7 +147,35 @@ The dashboard has no password, so only use `--lan` on a network you trust
 The chart needs the internet to load its drawing library the first time. If
 the internet is down, the status cards still work; only the chart is missing.
 
-## 5. Testing that it works
+## 5. Get alerts on your phone
+
+NetMon can send a push notification when a device goes down and again when it
+comes back. Each "down" alert says what to try, for example *"Check the
+printer is on, has paper, and its lid is closed."*
+
+1. Install the free **ntfy** app from the App Store or Google Play.
+2. In the NetMon folder, copy `alerts.example.yaml` to a new file named
+   `alerts.yaml`.
+3. Open `alerts.yaml` and change `ntfy_topic` to a long name nobody could
+   guess (anyone who knows it can read your alerts). Set `site_name` to your
+   restaurant's name.
+4. In the ntfy app, tap **+** and subscribe to that same topic name.
+5. Check it works:
+
+   ```powershell
+   .\.venv\Scripts\python.exe -m netmon.main --test-alert
+   ```
+
+   A "TEST: DOWN: Test printer" notification should appear on your phone.
+6. Restart NetMon. It now says `alerts: on` when it starts.
+
+To also post to a Slack or Discord channel, add that channel's incoming
+webhook link as `webhook_url` in `alerts.yaml`.
+
+**If the internet itself goes down,** alerts can't get out. NetMon keeps them
+and sends them as soon as the connection is back, marked "Sent late".
+
+## 6. Testing that it works
 
 Add a fake device to `devices.yaml`, using an address nothing is using:
 
@@ -160,7 +188,8 @@ Add a fake device to `devices.yaml`, using an address nothing is using:
 ```
 
 Restart NetMon. Within about 90 seconds the card turns red and an incident
-appears. Remove it again when you're done.
+appears (and, if alerts are on, your phone gets a notification).
+Remove it again when you're done.
 
 ## Common questions
 
@@ -186,6 +215,7 @@ to start fresh (with NetMon stopped).
 | `netmon/config.py` | Loads and validates `devices.yaml` |
 | `netmon/checker.py` | Ping and TCP checks (no database/web code, reusable by a future agent) |
 | `netmon/monitor.py` | Status rules (3-failure DOWN, 1-success UP, incidents) and the polling loop |
+| `netmon/alerts.py` | Alert messages with "what to do" tips, and delivery (ntfy, Slack/Discord) with retry |
 | `netmon/db.py` | SQLite schema and queries |
 | `netmon/main.py` | Web server, API and startup |
 | `static/index.html` | The dashboard |

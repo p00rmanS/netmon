@@ -8,6 +8,7 @@ import contextlib
 import logging
 import re
 import time
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -17,13 +18,16 @@ from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from .alerts import (
+    DEFAULT_ALERTS_PATH, AlertConfigError, AlertSender, build_alert, deliver, load_alert_config,
+)
 from .checker import run_check
 from .config import (
     DEFAULT_CONFIG_PATH, ConfigError, DeviceConfig, check_unique_names, load_devices,
     parse_device, save_devices,
 )
 from .db import Database
-from .monitor import CHECK_INTERVAL_S, DeviceRuntime, Monitor
+from .monitor import CHECK_INTERVAL_S, DeviceRuntime, Event, Monitor
 
 log = logging.getLogger("netmon")
 
@@ -96,19 +100,26 @@ def create_app(
     interval_s: float = CHECK_INTERVAL_S,
     start_background: bool = True,
     edit_hosts: tuple[str, ...] = LOCAL_HOSTS,
+    alerts_path: str | Path | None = None,
 ) -> FastAPI:
     @contextlib.asynccontextmanager
     async def lifespan(app: FastAPI):
         devices_cfg = load_devices(config_path)
+        alert_cfg = load_alert_config(alerts_path) if alerts_path else None
         db = Database(db_path)
         devices = db.sync_devices(devices_cfg)
-        monitor = Monitor(db, devices, interval_s=interval_s)
+        sender = AlertSender(alert_cfg) if alert_cfg and alert_cfg.enabled else None
+        monitor = Monitor(db, devices, interval_s=interval_s,
+                          on_event=sender.on_event if sender else None)
         app.state.db, app.state.monitor = db, monitor
         log.info("monitoring %d devices every %ss (db: %s)", len(devices), interval_s, db_path)
+        log.info("alerts: %s", "on" if sender else "off (no alerts.yaml)")
 
         tasks = []
         if start_background:
             tasks = [asyncio.create_task(monitor.run()), asyncio.create_task(monitor.run_retention())]
+            if sender:
+                tasks.append(asyncio.create_task(sender.run()))
         try:
             yield
         finally:
@@ -284,10 +295,27 @@ def create_app(
     return app
 
 
+def send_test_alert(cfg) -> None:
+    if not cfg.enabled:
+        raise SystemExit("Alerts are off: copy alerts.example.yaml to alerts.yaml and fill it in.")
+    now = time.time()
+    alert = build_alert("Test printer", "printer", "192.168.1.50", Event.WENT_DOWN, now, now - 90,
+                        cfg.site_name)
+    alert = replace(alert, title="TEST: " + alert.title)
+    try:
+        deliver(cfg, alert)
+    except OSError as e:
+        raise SystemExit(f"Couldn't send the test alert: {e}")
+    print("Test alert sent. Check your phone.")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="python -m netmon.main", description="NetMon network monitor")
     p.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="path to devices.yaml")
     p.add_argument("--db", default=str(DEFAULT_DB_PATH), help="path to the SQLite database")
+    p.add_argument("--alerts", default=str(DEFAULT_ALERTS_PATH), help="path to alerts.yaml")
+    p.add_argument("--test-alert", action="store_true",
+                   help="send one test alert using alerts.yaml, then exit")
     p.add_argument("--port", type=int, default=8000)
     p.add_argument("--host", default="127.0.0.1", help="address to listen on (default: this computer only)")
     p.add_argument("--lan", action="store_true",
@@ -300,8 +328,15 @@ def main() -> None:
         load_devices(args.config)  # fail fast with a readable message
     except ConfigError as e:
         raise SystemExit(f"Problem in devices.yaml: {e}")
+    try:
+        alert_cfg = load_alert_config(args.alerts)
+    except AlertConfigError as e:
+        raise SystemExit(f"Problem in alerts.yaml: {e}")
+    if args.test_alert:
+        send_test_alert(alert_cfg)
+        return
     host = "0.0.0.0" if args.lan else args.host
-    app = create_app(args.config, args.db, interval_s=args.interval)
+    app = create_app(args.config, args.db, interval_s=args.interval, alerts_path=args.alerts)
     print(f"\nNetMon dashboard: http://localhost:{args.port}"
           + ("  (also reachable from other devices on your network)" if args.lan else "") + "\n")
     uvicorn.run(app, host=host, port=args.port, log_level="warning")

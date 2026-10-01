@@ -5,3 +5,4 @@ __pycache__/
 *.sqlite3
 .pytest_cache/
 .claude/
+alerts.yaml

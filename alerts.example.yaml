@@ -1,0 +1,15 @@
+# NetMon alerts. Copy this file to alerts.yaml and fill it in.
+# alerts.yaml is never uploaded to GitHub, because the topic name works like a password.
+# After editing, restart NetMon. Check it works with:  python -m netmon.main --test-alert
+
+# Shown in every alert, so you can tell restaurants apart.
+site_name: Main Street
+
+# Push notifications to your phone with the free ntfy app (https://ntfy.sh).
+# 1. Install "ntfy" from the App Store or Google Play.
+# 2. Make up a long, hard-to-guess topic name (anyone who knows it can read your alerts).
+# 3. In the app, tap + and subscribe to that same topic name.
+ntfy_topic: netmon-mainstreet-change-me-7f3k9q
+
+# Optional: also post to a Slack or Discord channel (paste its incoming webhook URL).
+# webhook_url: https://hooks.slack.com/services/...
