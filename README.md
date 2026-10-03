@@ -178,7 +178,56 @@ webhook link as `webhook_url` in `alerts.yaml`.
 **If the internet itself goes down,** alerts can't get out. NetMon keeps them
 and sends them as soon as the connection is back, marked "Sent late".
 
-## 6. Testing that it works
+## 6. Leave it running at the restaurant
+
+For a restaurant you want NetMon on a small computer that stays on, starts
+NetMon by itself after a power cut, and restarts it if anything goes wrong.
+
+### Recommended: a Raspberry Pi
+
+A Raspberry Pi 4 or 5 (about $60–100 with power supply and SD card) is cheap,
+silent and uses very little power.
+
+1. Install **Raspberry Pi OS** with the official *Raspberry Pi Imager*. In its
+   settings, turn on SSH and set your Wi-Fi or plug the Pi into the router
+   with a cable (more reliable).
+2. Copy the NetMon folder onto the Pi, or download it:
+   `git clone https://github.com/p00rmanS/netmon.git`
+3. In that folder, run:
+
+   ```bash
+   bash scripts/install-linux.sh
+   ```
+
+   It asks for your password once, sets everything up, and prints the
+   dashboard address to open on your phone (e.g. `http://192.168.1.23:8000`).
+4. Copy `alerts.yaml` over too (see step 5) and restart with
+   `sudo systemctl restart netmon`.
+
+To remove it again: `bash scripts/install-linux.sh --uninstall`.
+
+### On a Windows computer that stays on
+
+From the NetMon folder (after step 1):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\install-windows.ps1
+```
+
+NetMon then starts quietly in the background whenever you log in to Windows.
+Make sure the computer is set to never sleep. To remove it, run the same
+command with `-Uninstall` on the end.
+
+### Is it still running?
+
+- Open `http://<NetMon computer>:8000/api/health`. `"ok": true` means it's
+  checking devices normally.
+- With alerts on, you get a **"NetMon started"** notification every time it
+  starts. If you didn't restart it yourself, the power probably went off.
+- Everything it does is written to `netmon.log` in the NetMon folder (kept
+  small automatically).
+
+## 7. Testing that it works
 
 Add a fake device to `devices.yaml`, using an address nothing is using:
 

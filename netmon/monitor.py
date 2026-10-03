@@ -135,6 +135,7 @@ class Monitor:
         self.interval_s = interval_s
         self.threshold = threshold
         self.on_event = on_event
+        self.last_cycle_at: float | None = None  # when the loop last finished a round of checks
         self.devices: dict[int, DeviceRuntime] = {d.id: self._load_runtime(d) for d in devices}
 
     def _load_runtime(self, d: DeviceRow) -> DeviceRuntime:
@@ -227,6 +228,7 @@ class Monitor:
             started = loop.time()
             try:
                 await self.check_all()
+                self.last_cycle_at = time.time()
             except Exception:
                 log.exception("check cycle failed")
             await asyncio.sleep(max(0.0, self.interval_s - (loop.time() - started)))

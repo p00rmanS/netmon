@@ -1,4 +1,5 @@
 import asyncio
+import time
 
 from netmon.alerts import (
     AlertConfig, AlertConfigError, AlertSender, build_alert, format_duration, load_alert_config,
@@ -122,3 +123,42 @@ def test_sender_retries_until_delivered(monkeypatch):
     s = asyncio.run(scenario())
     assert sent == ["DOWN: Router", "Back UP: Router"]  # in order, nothing lost
     assert not s.queue
+
+
+def test_started_alert_mentions_power():
+    from netmon.alerts import build_started_alert
+    a = build_started_alert(12, at=1000.0, site="Main St")
+    assert a.title == "NetMon started at Main St"
+    assert "12 devices" in a.message and "power" in a.message
+
+
+def test_notify_on_start_defaults_on_and_can_be_turned_off(tmp_path):
+    p = tmp_path / "alerts.yaml"
+    p.write_text("ntfy_topic: t\n", encoding="utf-8")
+    assert load_alert_config(p).notify_on_start is True
+    p.write_text("ntfy_topic: t\nnotify_on_start: false\n", encoding="utf-8")
+    assert load_alert_config(p).notify_on_start is False
+    p.write_text("ntfy_topic: t\nnotify_on_start: maybe\n", encoding="utf-8")
+    with pytest.raises(AlertConfigError):
+        load_alert_config(p)
+
+
+def test_app_queues_started_alert(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from netmon.main import create_app
+    cfg = tmp_path / "devices.yaml"
+    cfg.write_text("devices:\n  - {name: R, type: router, ip: 10.0.0.1, check: ping}\n", encoding="utf-8")
+    alerts = tmp_path / "alerts.yaml"
+    alerts.write_text("ntfy_topic: t\n", encoding="utf-8")
+    sent = []
+    monkeypatch.setattr("netmon.alerts.deliver", lambda cfg, alert: sent.append(alert.title))
+    monkeypatch.setattr("netmon.monitor.Monitor.run", lambda self: asyncio.sleep(3600))
+    monkeypatch.setattr("netmon.monitor.Monitor.run_retention", lambda self: asyncio.sleep(3600))
+    app = create_app(cfg, tmp_path / "t.db", alerts_path=alerts)
+    with TestClient(app) as c:
+        for _ in range(100):
+            if sent:
+                break
+            time.sleep(0.01)
+        assert c.get("/api/health").json()["alerts"] == "on"
+    assert sent == ["NetMon started"]

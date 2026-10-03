@@ -100,6 +100,19 @@ def build_alert(
     )
 
 
+def build_started_alert(device_count: int, at: float, site: str = "") -> Alert:
+    """Sent when NetMon starts, so a reboot or power cut at the site doesn't go unnoticed."""
+    where = f" at {site}" if site else ""
+    return Alert(
+        title=f"NetMon started{where}",
+        message=f"NetMon started at {clock(at)} and is watching {device_count} devices. "
+                "If you didn't restart it, the power or the NetMon computer may have gone off.",
+        priority=2,
+        tags=("information_source",),
+        created_at=at,
+    )
+
+
 def mark_late(alert: Alert, now: float) -> Alert:
     """Note on an alert that it couldn't be sent when it happened."""
     if now - alert.created_at < LATE_AFTER_S:
@@ -122,6 +135,7 @@ class AlertConfig:
     ntfy_topic: str = ""
     ntfy_server: str = "https://ntfy.sh"
     webhook_url: str = ""  # Slack or Discord incoming webhook
+    notify_on_start: bool = True
 
     @property
     def enabled(self) -> bool:
@@ -148,7 +162,12 @@ def load_alert_config(path: str | Path = DEFAULT_ALERTS_PATH) -> AlertConfig:
             raise AlertConfigError(f"{path.name}: '{key}' must be text")
         return str(value).strip()
 
+    notify_on_start = data.get("notify_on_start", True)
+    if not isinstance(notify_on_start, bool):
+        raise AlertConfigError(f"{path.name}: 'notify_on_start' must be true or false")
+
     cfg = AlertConfig(
+        notify_on_start=notify_on_start,
         site_name=text("site_name"),
         ntfy_topic=text("ntfy_topic"),
         ntfy_server=text("ntfy_server", AlertConfig.ntfy_server).rstrip("/"),
@@ -200,19 +219,23 @@ def deliver(cfg: AlertConfig, alert: Alert) -> None:
 class AlertSender:
     """Queue alerts and deliver them in order, retrying until they get through."""
 
-    def __init__(self, cfg: AlertConfig, send=deliver):
+    def __init__(self, cfg: AlertConfig, send=None):
         self.cfg = cfg
-        self._send = send
+        self._send = send or deliver
         self.queue: deque[Alert] = deque(maxlen=MAX_QUEUED)
         self._wake = asyncio.Event()
+
+    def send(self, alert: Alert) -> None:
+        """Queue an alert for delivery."""
+        if len(self.queue) == self.queue.maxlen:
+            log.warning("alert queue full; dropping the oldest alert")
+        self.queue.append(alert)
+        self._wake.set()
 
     def on_event(self, name: str, device_type: str, ip: str, event: Event,
                  at: float, started_at: float | None) -> None:
         """Monitor callback: called once per status change."""
-        if len(self.queue) == self.queue.maxlen:
-            log.warning("alert queue full; dropping the oldest alert")
-        self.queue.append(build_alert(name, device_type, ip, event, at, started_at, self.cfg.site_name))
-        self._wake.set()
+        self.send(build_alert(name, device_type, ip, event, at, started_at, self.cfg.site_name))
 
     async def run(self) -> None:
         attempt = 0

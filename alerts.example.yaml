@@ -13,3 +13,7 @@ ntfy_topic: netmon-mainstreet-change-me-7f3k9q
 
 # Optional: also post to a Slack or Discord channel (paste its incoming webhook URL).
 # webhook_url: https://hooks.slack.com/services/...
+
+# Send a short notice whenever NetMon starts. If you didn't restart it, that
+# usually means the power went off. Set to false to turn it off.
+notify_on_start: true

@@ -6,8 +6,10 @@ import argparse
 import asyncio
 import contextlib
 import logging
+import logging.handlers
 import re
 import shutil
+import sys
 import time
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -20,7 +22,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from .alerts import (
-    DEFAULT_ALERTS_PATH, AlertConfigError, AlertSender, build_alert, deliver, load_alert_config,
+    DEFAULT_ALERTS_PATH, AlertConfigError, AlertSender, build_alert, build_started_alert, deliver,
+    load_alert_config,
 )
 from .checker import run_check
 from .config import (
@@ -35,6 +38,7 @@ log = logging.getLogger("netmon")
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 STATIC_DIR = PROJECT_ROOT / "static"
 DEFAULT_DB_PATH = PROJECT_ROOT / "netmon.db"
+DEFAULT_LOG_PATH = PROJECT_ROOT / "netmon.log"
 
 # Clients allowed to change the device list: only the NetMon computer itself.
 LOCAL_HOSTS = ("127.0.0.1", "::1")
@@ -110,6 +114,7 @@ def create_app(
         db = Database(db_path)
         devices = db.sync_devices(devices_cfg)
         sender = AlertSender(alert_cfg) if alert_cfg and alert_cfg.enabled else None
+        app.state.sender, app.state.started_at = sender, time.time()
         monitor = Monitor(db, devices, interval_s=interval_s,
                           on_event=sender.on_event if sender else None)
         app.state.db, app.state.monitor = db, monitor
@@ -120,6 +125,8 @@ def create_app(
         if start_background:
             tasks = [asyncio.create_task(monitor.run()), asyncio.create_task(monitor.run_retention())]
             if sender:
+                if alert_cfg.notify_on_start:
+                    sender.send(build_started_alert(len(devices), time.time(), alert_cfg.site_name))
                 tasks.append(asyncio.create_task(sender.run()))
         try:
             yield
@@ -173,6 +180,26 @@ def create_app(
                 "duration_s": round(end - inc["started_at"], 1),
             })
         return out
+
+    @app.get("/api/health")
+    async def health(response: Response):
+        """Is NetMon itself working? 503 if the check loop has stopped running."""
+        now = time.time()
+        last = app.state.monitor.last_cycle_at
+        # Allow a full interval plus the 2 s check timeout, twice over, before calling it stuck.
+        since = last if last is not None else app.state.started_at
+        ok = now - since < 2 * (interval_s + 5) + 10
+        if not ok:
+            response.status_code = 503
+        sender = app.state.sender
+        return {
+            "ok": ok,
+            "uptime_s": round(now - app.state.started_at),
+            "last_check_cycle": iso(last),
+            "devices": len(app.state.monitor.devices),
+            "alerts": "off" if sender is None else "on",
+            "alerts_waiting": 0 if sender is None else len(sender.queue),
+        }
 
     # ------------------------------------------------------------ editing devices
 
@@ -315,6 +342,8 @@ def main() -> None:
     p.add_argument("--config", default=str(DEFAULT_CONFIG_PATH), help="path to devices.yaml")
     p.add_argument("--db", default=str(DEFAULT_DB_PATH), help="path to the SQLite database")
     p.add_argument("--alerts", default=str(DEFAULT_ALERTS_PATH), help="path to alerts.yaml")
+    p.add_argument("--log-file", default=str(DEFAULT_LOG_PATH),
+                   help="where to keep the log (kept small automatically); '' to turn off")
     p.add_argument("--test-alert", action="store_true",
                    help="send one test alert using alerts.yaml, then exit")
     p.add_argument("--port", type=int, default=8000)
@@ -324,7 +353,14 @@ def main() -> None:
     p.add_argument("--interval", type=float, default=CHECK_INTERVAL_S, help=argparse.SUPPRESS)
     args = p.parse_args()
 
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    # No console when started in the background (pythonw on Windows), so log to the file only.
+    handlers: list[logging.Handler] = [logging.StreamHandler()] if sys.stderr else []
+    if args.log_file:
+        # Three files of 1 MB at most, so it can run for months without filling the disk.
+        handlers.append(logging.handlers.RotatingFileHandler(
+            args.log_file, maxBytes=1_000_000, backupCount=2, encoding="utf-8"))
+    logging.basicConfig(level=logging.INFO, handlers=handlers,
+                        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     config = Path(args.config)
     example = PROJECT_ROOT / "devices.example.yaml"
     if not config.exists() and example.exists():

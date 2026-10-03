@@ -71,3 +71,11 @@ def test_dashboard_served(client):
     r = client.get("/")
     assert r.status_code == 200
     assert "text/html" in r.headers["content-type"]
+
+
+def test_health_ok_then_stuck(client):
+    body = client.get("/api/health").json()
+    assert body["ok"] is True and body["devices"] == 2 and body["alerts"] == "off"
+    client.monitor.last_cycle_at = time.time() - 3600  # loop hasn't run for an hour
+    r = client.get("/api/health")
+    assert r.status_code == 503 and r.json()["ok"] is False

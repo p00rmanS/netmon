@@ -8,3 +8,5 @@ __pycache__/
 alerts.yaml
 _site/
 devices.yaml
+*.log
+*.log.*
