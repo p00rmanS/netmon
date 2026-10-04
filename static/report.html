@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>NetMon weekly report</title>
+<style>
+  :root {
+    --bg: #f5f6f8;
+    --surface: #ffffff;
+    --border: #e2e5ea;
+    --text: #1b1f24;
+    --muted: #5f6b7a;
+    --up: #1a7f4b;
+    --up-bg: #e3f4ea;
+    --down: #c62828;
+    --down-bg: #fde8e8;
+    --warn: #9a6700;
+    --warn-bg: #fff4d6;
+    --accent: #2f6fdb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1216;
+      --surface: #181c22;
+      --border: #2a3039;
+      --text: #e6e9ee;
+      --muted: #97a1ae;
+      --up: #4cc38a;
+      --up-bg: #15322a;
+      --down: #ff6b6b;
+      --down-bg: #3a1a1c;
+      --warn: #e3b341;
+      --warn-bg: #33290f;
+      --accent: #6ea0ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 960px; margin: 0 auto; padding: 16px 16px 48px; }
+  .top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .btn {
+    font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; text-decoration: none;
+    padding: 5px 10px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface); color: var(--text); display: inline-block;
+  }
+  .btn:hover { border-color: var(--accent); }
+  h1 { font-size: 22px; margin: 18px 0 2px; }
+  .period { color: var(--muted); margin: 0 0 20px; }
+  h2 { font-size: 16px; margin: 32px 0 10px; }
+
+  .hero { display: grid; grid-template-columns: 1.3fr repeat(3, 1fr); gap: 12px; }
+  .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px; }
+  .tile .label { color: var(--muted); font-size: 13px; }
+  .tile .value { font-size: 28px; font-weight: 650; margin-top: 2px; line-height: 1.15; }
+  .tile.main .value { font-size: 48px; }
+  .tile .delta { font-size: 13px; margin-top: 4px; color: var(--muted); }
+  .delta.good { color: var(--up); }
+  .delta.bad { color: var(--down); }
+
+  .note { margin: 14px 0 0; padding: 10px 14px; border-radius: 10px; background: var(--warn-bg); color: var(--warn); }
+  .good-news { padding: 18px; border-radius: 12px; background: var(--up-bg); color: var(--up); font-weight: 600; }
+
+  .table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { padding: 10px 12px; text-align: right; white-space: nowrap; border-bottom: 1px solid var(--border); }
+  th:first-child, td:first-child { text-align: left; white-space: normal; }
+  tr:last-child td { border-bottom: 0; }
+  th { font-size: 12px; font-weight: 600; color: var(--muted); }
+  td.name { font-weight: 600; }
+  td.name small { display: block; font-weight: 400; color: var(--muted); }
+  .bad-num { color: var(--down); font-weight: 650; }
+  .dim { color: var(--muted); }
+
+  .outages { list-style: none; padding: 0; margin: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; }
+  .outages li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+  .outages li:last-child { border-bottom: 0; }
+  .outages .when { color: var(--muted); text-align: right; white-space: nowrap; }
+  .ongoing { color: var(--down); font-weight: 600; }
+  .error { color: var(--down); }
+  footer { margin-top: 28px; color: var(--muted); font-size: 13px; }
+
+  @media (max-width: 720px) {
+    .hero { grid-template-columns: 1fr 1fr; }
+    .tile.main, .tile.coverage { grid-column: 1 / -1; }
+    .hide-sm { display: none; }
+    .outages li { flex-direction: column; gap: 2px; }
+    .outages .when { text-align: left; white-space: normal; }
+  }
+  @media print {
+    :root { --bg: #fff; --surface: #fff; }
+    .no-print { display: none !important; }
+    main { padding: 0; }
+    .tile, .table-wrap, .outages { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="top no-print">
+    <a class="btn" href="./">← Dashboard</a>
+    <button class="btn" onclick="window.print()">Print or save as PDF</button>
+  </div>
+
+  <h1 id="title">Weekly network report</h1>
+  <p class="period" id="period">Loading…</p>
+  <p class="error" id="error" hidden></p>
+
+  <div id="content" hidden>
+    <div class="hero">
+      <div class="tile main">
+        <div class="label">Network uptime</div>
+        <div class="value" id="uptime"></div>
+        <div class="delta" id="uptime-note"></div>
+      </div>
+      <div class="tile">
+        <div class="label">Outages</div>
+        <div class="value" id="outage-count"></div>
+        <div class="delta" id="outage-delta"></div>
+      </div>
+      <div class="tile">
+        <div class="label">Total downtime</div>
+        <div class="value" id="downtime"></div>
+        <div class="delta" id="downtime-delta"></div>
+      </div>
+      <div class="tile coverage">
+        <div class="label">NetMon was watching</div>
+        <div class="value" id="coverage"></div>
+        <div class="delta">of the week</div>
+      </div>
+    </div>
+    <p class="note" id="partial-note" hidden></p>
+    <p class="note" id="coverage-note" hidden></p>
+
+    <h2>By device</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th scope="col">Device</th><th scope="col">Outages</th><th scope="col">Downtime</th>
+          <th scope="col" class="hide-sm">Longest</th><th scope="col">Uptime</th>
+          <th scope="col" class="hide-sm">Avg response</th>
+        </tr></thead>
+        <tbody id="devices"></tbody>
+      </table>
+    </div>
+
+    <h2>Every outage</h2>
+    <div id="outage-list"></div>
+
+    <footer>Downtime is counted from the first missed check. Uptime only covers the time NetMon was running.</footer>
+  </div>
+</main>
+
+<script>
+"use strict";
+const ICONS = { router: "📡", switch: "🔀", ap: "📶", printer: "🧾", pos: "💳", internet: "🌐" };
+const $ = (id) => document.getElementById(id);
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function fmtDuration(sec) {
+  sec = Math.max(0, Math.round(sec));
+  if (sec === 0) return "0 min";
+  if (sec < 60) return `${sec} sec`;
+  const m = Math.floor(sec / 60);
+  if (m < 60) return `${m} min`;
+  const h = Math.floor(m / 60), mm = m % 60;
+  return mm ? `${h} h ${mm} min` : `${h} h`;
+}
+
+// 99.95% must not round up to "100%": an outage happened, so show it.
+function fmtPct(p) {
+  if (p == null) return "—";
+  if (p >= 100) return "100%";
+  const digits = p >= 99 ? 2 : 1;
+  const f = Math.pow(10, digits);
+  return `${(Math.floor(p * f) / f).toFixed(digits)}%`;
+}
+
+function fmtDate(iso, withTime) {
+  const d = new Date(iso);
+  const date = d.toLocaleDateString([], { weekday: withTime ? "short" : undefined, month: "short", day: "numeric" });
+  return withTime ? `${date}, ${d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : date;
+}
+
+function fmtLatency(ms) {
+  if (ms == null) return "—";
+  return ms < 10 ? `${ms.toFixed(1)} ms` : `${Math.round(ms)} ms`;
+}
+
+// Fewer outages / less downtime than last week is good. phrase(amount, isMore) words it.
+function delta(el, now, before, phrase) {
+  if (before == null) { el.textContent = ""; return; }
+  const diff = now - before;
+  if (diff === 0) { el.textContent = "Same as the week before"; el.className = "delta"; return; }
+  el.textContent = `${diff > 0 ? "▲" : "▼"} ${phrase(Math.abs(diff), diff > 0)} than the week before`;
+  el.className = `delta ${diff > 0 ? "bad" : "good"}`;
+}
+
+function render(r) {
+  if (r.site_name) {
+    $("title").textContent = `Weekly network report: ${r.site_name}`;
+    document.title = `NetMon report: ${r.site_name}`;
+  }
+  $("period").textContent = `${fmtDate(r.watching_since)} – ${fmtDate(r.end)} · ${r.devices.length} devices`;
+  const partial = new Date(r.watching_since) - new Date(r.start) > 3600e3;
+  $("partial-note").hidden = !partial;
+  if (partial) {
+    $("partial-note").textContent = `NetMon started watching on ${fmtDate(r.watching_since, true)}, ` +
+      "so this report covers less than a full week. Comparisons with the week before start after two full weeks.";
+  }
+
+  $("uptime").textContent = fmtPct(r.uptime_pct);
+  $("uptime-note").textContent = r.outage_count ? "" : "No outages at all";
+  $("outage-count").textContent = r.outage_count;
+  delta($("outage-delta"), r.outage_count, r.previous_outage_count,
+        (n, more) => `${n} ${more ? "more" : "fewer"} ${n === 1 ? "outage" : "outages"}`);
+  $("downtime").textContent = fmtDuration(r.downtime_s);
+  delta($("downtime-delta"), r.downtime_s, r.previous_downtime_s,
+        (s, more) => `${fmtDuration(s)} ${more ? "more" : "less"}`);
+  $("coverage").textContent = r.coverage_pct == null ? "—" : `${Math.round(r.coverage_pct)}%`;
+
+  const lowCoverage = r.coverage_pct != null && r.coverage_pct < 95;
+  $("coverage-note").hidden = !lowCoverage;
+  if (lowCoverage) {
+    $("coverage-note").textContent = `NetMon was only running ${Math.round(r.coverage_pct)}% of this period ` +
+      "(it was switched off or restarting), so outages during that time weren't seen.";
+  }
+
+  $("devices").innerHTML = r.devices.map((d) => `
+    <tr>
+      <td class="name">${ICONS[d.type] || "❔"} ${esc(d.name)}</td>
+      <td class="${d.outages ? "bad-num" : "dim"}">${d.outages}</td>
+      <td class="${d.downtime_s ? "" : "dim"}">${fmtDuration(d.downtime_s)}</td>
+      <td class="hide-sm ${d.longest_s ? "" : "dim"}">${d.longest_s ? fmtDuration(d.longest_s) : "—"}</td>
+      <td>${fmtPct(d.uptime_pct)}</td>
+      <td class="hide-sm">${fmtLatency(d.avg_latency_ms)}</td>
+    </tr>`).join("");
+
+  $("outage-list").innerHTML = r.outages.length
+    ? `<ul class="outages">${r.outages.map((o) => `
+        <li>
+          <span>${ICONS[o.device_type] || "❔"} <strong>${esc(o.device_name)}</strong></span>
+          <span class="when">${fmtDate(o.started_at, true)} ·
+            ${o.ongoing ? `<span class="ongoing">still down, ${fmtDuration(o.duration_s)}</span>` : fmtDuration(o.duration_s)}</span>
+        </li>`).join("")}</ul>`
+    : `<div class="good-news">No outages this week. Every device stayed up.</div>`;
+
+  $("content").hidden = false;
+}
+
+fetch("/api/report?days=7", { cache: "no-store" })
+  .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+  .then(render)
+  .catch((e) => {
+    $("period").textContent = "";
+    $("error").hidden = false;
+    $("error").textContent = `Couldn't load the report (${e.message}). Is NetMon running?`;
+  });
+</script>
+</body>
+</html>

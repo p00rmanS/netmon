@@ -22,8 +22,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from .alerts import (
-    DEFAULT_ALERTS_PATH, AlertConfigError, AlertSender, build_alert, build_started_alert, deliver,
-    load_alert_config,
+    DEFAULT_ALERTS_PATH, Alert, AlertConfigError, AlertSender, build_alert, build_started_alert,
+    deliver, load_alert_config,
 )
 from .checker import run_check
 from .config import (
@@ -32,6 +32,7 @@ from .config import (
 )
 from .db import Database
 from .monitor import CHECK_INTERVAL_S, DeviceRuntime, Event, Monitor
+from .report import Report, build_report, next_weekly, summary_text
 
 log = logging.getLogger("netmon")
 
@@ -115,6 +116,7 @@ def create_app(
         devices = db.sync_devices(devices_cfg)
         sender = AlertSender(alert_cfg) if alert_cfg and alert_cfg.enabled else None
         app.state.sender, app.state.started_at = sender, time.time()
+        app.state.site_name = alert_cfg.site_name if alert_cfg else ""
         monitor = Monitor(db, devices, interval_s=interval_s,
                           on_event=sender.on_event if sender else None)
         app.state.db, app.state.monitor = db, monitor
@@ -128,6 +130,8 @@ def create_app(
                 if alert_cfg.notify_on_start:
                     sender.send(build_started_alert(len(devices), time.time(), alert_cfg.site_name))
                 tasks.append(asyncio.create_task(sender.run()))
+                if alert_cfg.weekly_summary:
+                    tasks.append(asyncio.create_task(weekly_summaries(app, sender)))
         try:
             yield
         finally:
@@ -180,6 +184,11 @@ def create_app(
                 "duration_s": round(end - inc["started_at"], 1),
             })
         return out
+
+    @app.get("/api/report")
+    async def report(days: float = Query(7, gt=0, le=7)):
+        """Outages, downtime and uptime per device. At most 7 days: older checks are deleted."""
+        return report_json(make_report(app, time.time(), days))
 
     @app.get("/api/health")
     async def health(response: Response):
@@ -320,7 +329,62 @@ def create_app(
     async def dashboard():
         return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"})
 
+    @app.get("/report", include_in_schema=False)
+    async def report_page():
+        return FileResponse(STATIC_DIR / "report.html", headers={"Cache-Control": "no-cache"})
+
     return app
+
+
+def make_report(app: FastAPI, end: float, days: float) -> Report:
+    db: Database = app.state.db
+    start = end - days * 86400
+    return build_report(
+        db.active_devices(), db.incidents_overlapping(start, end), db.check_stats(start, end),
+        start, end, app.state.monitor.interval_s,
+        previous_incidents=db.incidents_overlapping(start - (end - start), start),
+        site_name=app.state.site_name,
+    )
+
+
+def report_json(r: Report) -> dict:
+    return {
+        "site_name": r.site_name,
+        "start": iso(r.start),
+        "watching_since": iso(r.watching_since),
+        "end": iso(r.end),
+        "uptime_pct": r.uptime_pct,
+        "coverage_pct": r.coverage_pct,
+        "outage_count": len(r.outages),
+        "downtime_s": round(r.downtime_s),
+        "previous_outage_count": r.previous_outages,
+        "previous_downtime_s": None if r.previous_downtime_s is None else round(r.previous_downtime_s),
+        "devices": [{
+            "id": d.id, "name": d.name, "type": d.type, "outages": d.outages,
+            "downtime_s": round(d.downtime_s), "longest_s": round(d.longest_s),
+            "uptime_pct": d.uptime_pct, "coverage_pct": d.coverage_pct,
+            "avg_latency_ms": d.avg_latency_ms,
+        } for d in r.devices],
+        "outages": [{
+            "device_id": o.device_id, "device_name": o.device_name, "device_type": o.device_type,
+            "started_at": iso(o.started_at), "resolved_at": iso(o.resolved_at),
+            "ongoing": o.resolved_at is None, "duration_s": round(o.duration_s),
+        } for o in r.outages],
+    }
+
+
+async def weekly_summaries(app: FastAPI, sender: AlertSender) -> None:
+    """Every Monday at 9:00 (this computer's time), send last week's summary."""
+    while True:
+        wake = next_weekly(datetime.now()).timestamp()
+        await asyncio.sleep(max(1.0, wake - time.time()))
+        try:
+            now = time.time()
+            title, message = summary_text(await asyncio.to_thread(make_report, app, now, 7))
+            sender.send(Alert(title, message, priority=3, tags=("bar_chart",), created_at=now))
+        except Exception:
+            log.exception("weekly summary failed")
+        await asyncio.sleep(60)  # never send twice for the same Monday
 
 
 def send_test_alert(cfg) -> None:

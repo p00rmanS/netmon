@@ -147,6 +147,17 @@ The dashboard has no password, so only use `--lan` on a network you trust
   banner appears, NetMon on the laptop has stopped or the laptop is off
   the network.
 
+### The weekly report
+
+Tap **Weekly report** (top right) for the last 7 days: overall uptime, how
+many outages there were, total downtime, and a line for every device and every
+outage. **Print or save as PDF** turns it into a page you can hand to the owner
+or send to your internet provider as evidence.
+
+"NetMon was watching" shows how much of the week NetMon was actually running.
+If it was switched off for a while, outages in that time weren't seen, so the
+report says so rather than claiming 100%.
+
 The chart needs the internet to load its drawing library the first time. If
 the internet is down, the status cards still work; only the chart is missing.
 
@@ -171,6 +182,10 @@ printer is on, has paper, and its lid is closed."*
 
    A "TEST: DOWN: Test printer" notification should appear on your phone.
 6. Restart NetMon. It now says `alerts: on` when it starts.
+
+Every **Monday at 9:00** you also get a short summary of last week, e.g.
+*"Last 7 days: 3 outages, 22 min down in total. Kitchen Printer: 2 outages
+(15 min)."* Turn it off with `weekly_summary: false` in `alerts.yaml`.
 
 To also post to a Slack or Discord channel, add that channel's incoming
 webhook link as `webhook_url` in `alerts.yaml`.
@@ -267,10 +282,12 @@ to start fresh (with NetMon stopped).
 | `netmon/config.py` | Loads and validates `devices.yaml` |
 | `netmon/checker.py` | Ping and TCP checks (no database/web code, reusable by a future agent) |
 | `netmon/monitor.py` | Status rules (3-failure DOWN, 1-success UP, incidents) and the polling loop |
+| `netmon/report.py` | Weekly report: downtime, uptime and coverage per device (no database/web code) |
 | `netmon/alerts.py` | Alert messages with "what to do" tips, and delivery (ntfy, Slack/Discord) with retry |
 | `netmon/db.py` | SQLite schema and queries |
 | `netmon/main.py` | Web server, API and startup |
 | `static/index.html` | The dashboard |
+| `static/report.html` | The weekly report page |
 
 ### The website (GitHub Pages)
 
@@ -281,7 +298,7 @@ to `main`, `.github/workflows/pages.yml` runs the tests and publishes it.
 The website is only a demo: real monitoring always runs on the restaurant's
 own network.
 
-API: `GET /api/devices`, `GET /api/devices/{id}/history?hours=24`,
+API: `GET /api/report?days=7`, `GET /api/health`, `GET /api/devices`, `GET /api/devices/{id}/history?hours=24`,
 `GET /api/incidents?limit=50`, `GET /api/meta`.
 Editing (from the NetMon computer only): `POST /api/devices`,
 `PUT /api/devices/{id}`, `DELETE /api/devices/{id}`, `POST /api/check` (test without saving).

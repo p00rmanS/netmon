@@ -136,6 +136,7 @@ class AlertConfig:
     ntfy_server: str = "https://ntfy.sh"
     webhook_url: str = ""  # Slack or Discord incoming webhook
     notify_on_start: bool = True
+    weekly_summary: bool = True  # Monday 9:00 summary of the past week
 
     @property
     def enabled(self) -> bool:
@@ -162,12 +163,15 @@ def load_alert_config(path: str | Path = DEFAULT_ALERTS_PATH) -> AlertConfig:
             raise AlertConfigError(f"{path.name}: '{key}' must be text")
         return str(value).strip()
 
-    notify_on_start = data.get("notify_on_start", True)
-    if not isinstance(notify_on_start, bool):
-        raise AlertConfigError(f"{path.name}: 'notify_on_start' must be true or false")
+    def flag(key: str) -> bool:
+        value = data.get(key, True)
+        if not isinstance(value, bool):
+            raise AlertConfigError(f"{path.name}: '{key}' must be true or false")
+        return value
 
     cfg = AlertConfig(
-        notify_on_start=notify_on_start,
+        notify_on_start=flag("notify_on_start"),
+        weekly_summary=flag("weekly_summary"),
         site_name=text("site_name"),
         ntfy_topic=text("ntfy_topic"),
         ntfy_server=text("ntfy_server", AlertConfig.ntfy_server).rstrip("/"),

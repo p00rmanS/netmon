@@ -130,6 +130,7 @@
     padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border);
     background: var(--surface); color: var(--text);
   }
+  a.btn { text-decoration: none; display: inline-block; }
   .btn:hover { border-color: var(--accent); }
   .btn:disabled { opacity: .55; cursor: default; }
   .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
@@ -164,6 +165,7 @@
     <h1>NetMon</h1>
     <div class="head-right">
       <span class="updated" id="updated">Loading…</span>
+      <a class="btn small" id="report-link" href="report">Weekly report</a>
       <button class="btn small" id="manage-btn" hidden>Manage devices</button>
     </div>
   </header>

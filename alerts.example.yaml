@@ -17,3 +17,7 @@ ntfy_topic: netmon-mainstreet-change-me-7f3k9q
 # Send a short notice whenever NetMon starts. If you didn't restart it, that
 # usually means the power went off. Set to false to turn it off.
 notify_on_start: true
+
+# Every Monday at 9:00, send a summary of last week: how many outages, how long,
+# and which devices. Set to false to turn it off.
+weekly_summary: true

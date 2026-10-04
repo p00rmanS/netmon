@@ -233,3 +233,25 @@ class Database:
                 (limit,),
             ).fetchall()
         return [dict(r) for r in rows]
+
+    def incidents_overlapping(self, start: float, end: float) -> list[dict]:
+        """Incidents (any device) that were ongoing at some point in [start, end)."""
+        with self._lock:
+            rows = self._conn.execute(
+                """SELECT id, device_id, started_at, resolved_at FROM incidents
+                   WHERE started_at < ? AND (resolved_at IS NULL OR resolved_at > ?)
+                   ORDER BY started_at""",
+                (end, start),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def check_stats(self, start: float, end: float) -> dict[int, dict]:
+        """Per device: number of checks, and average latency of successful ones, in [start, end)."""
+        with self._lock:
+            rows = self._conn.execute(
+                """SELECT device_id, COUNT(*) AS checks, AVG(latency_ms) AS avg_latency_ms
+                   FROM checks WHERE timestamp >= ? AND timestamp < ?
+                   GROUP BY device_id""",
+                (start, end),
+            ).fetchall()
+        return {r["device_id"]: {"checks": r["checks"], "avg_latency_ms": r["avg_latency_ms"]} for r in rows}

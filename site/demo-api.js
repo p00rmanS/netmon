@@ -26,7 +26,11 @@
     [5, 140, 11],          // Patio Wi-Fi, earlier today
     [2, 610, 6],           // Internet blip this morning
     [9, 1300, 3],          // Bar POS, yesterday
+    [7, 3 * 1440 + 200, 8],   // Bar Printer, 3 days ago
+    [2, 5 * 1440 + 90, 14],   // Internet, 5 days ago
   ];
+  // The week before, for the report's comparison: more outages, more downtime.
+  const PREVIOUS_WEEK = { outages: 7, downtime_s: 71 * 60 };
 
   function rand(seed) {  // small deterministic PRNG so the charts don't reshuffle
     return () => {
@@ -97,7 +101,30 @@
     });
   }
 
+  function report() {
+    const now = Date.now(), start = now - 7 * 24 * H;
+    const inc = incidents();
+    const devices = DEVICES.map((d) => {
+      const mine = inc.filter((i) => i.device_id === d.id);
+      const down = mine.reduce((s, i) => s + i.duration_s, 0);
+      return {
+        id: d.id, name: d.name, type: d.type, outages: mine.length, downtime_s: down,
+        longest_s: Math.max(0, ...mine.map((i) => i.duration_s)),
+        uptime_pct: 100 * (1 - down / (7 * 24 * 3600)), coverage_pct: 100, avg_latency_ms: d.base,
+      };
+    }).sort((a, b) => b.downtime_s - a.downtime_s || b.outages - a.outages || a.name.localeCompare(b.name));
+    const downtime = devices.reduce((s, d) => s + d.downtime_s, 0);
+    return {
+      site_name: "Demo Bistro", start: iso(start), watching_since: iso(start), end: iso(now),
+      uptime_pct: 100 * (1 - downtime / (DEVICES.length * 7 * 24 * 3600)), coverage_pct: 100,
+      outage_count: inc.length, downtime_s: downtime,
+      previous_outage_count: PREVIOUS_WEEK.outages, previous_downtime_s: PREVIOUS_WEEK.downtime_s,
+      devices, outages: inc,
+    };
+  }
+
   function route(path, params) {
+    if (path === "/api/report") return report();
     if (path === "/api/meta") return { can_edit: false };
     if (path === "/api/devices") return devicesNow();
     if (path === "/api/incidents") return incidents().slice(0, +(params.get("limit") || 50));
