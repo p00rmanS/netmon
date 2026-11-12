@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>NetMon</title>
+<link rel="icon" id="favicon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='12' fill='%236b7280'/%3E%3C/svg%3E">
 <style>
   :root {
     --bg: #f5f6f8;
@@ -49,7 +50,7 @@
     font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
   main { max-width: 1100px; margin: 0 auto; padding: 16px 16px 48px; }
-  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
   h1 { font-size: 20px; margin: 4px 0; letter-spacing: .2px; }
   h2 { font-size: 16px; margin: 28px 0 10px; }
   .updated { color: var(--muted); font-size: 13px; }
@@ -71,7 +72,7 @@
   .summary.bad .dot { background: var(--down); }
   .summary .sub { font-weight: 400; color: var(--muted); font-size: 14px; }
 
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; align-items: start; }
   .card {
     text-align: left; font: inherit; color: inherit; cursor: pointer; width: 100%;
     background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
@@ -92,19 +93,64 @@
   }
   .pill.UP { background: var(--up-bg); color: var(--up); }
   .pill.DOWN { background: var(--down); color: #fff; }
-  .card-bottom { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--muted); }
+  .card.warn { border-left-color: var(--warn); }
+  .age { margin-left: auto; }
+  .card-bottom { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 13px; color: var(--muted); }
   .latency { font-size: 18px; font-weight: 600; color: var(--text); font-variant-numeric: tabular-nums; }
-  .note { font-size: 13px; color: var(--warn); }
-  .card.DOWN .note { color: var(--down); font-weight: 600; }
+  .note { font-size: 13px; color: var(--warn); font-weight: 600; }
+  .card.DOWN .note { color: var(--down); }
+  .tip { font-size: 14px; line-height: 1.4; padding: 8px 10px; border-radius: 8px;
+    background: var(--surface); border: 1px solid var(--border); }
+  .tip b { display: block; font-size: 12px; color: var(--muted); margin-bottom: 2px; }
+  .grid.stale .card { opacity: .55; }
+
+  /* Loading placeholders */
+  .card.skeleton { cursor: default; height: 108px; border-left-color: var(--border); }
+  .card.skeleton::after { content: ""; display: block; height: 14px; width: 60%; border-radius: 6px; background: var(--unknown-bg); }
+
+  /* A short highlight when a card changes status, so the change is noticed */
+  @media (prefers-reduced-motion: no-preference) {
+    .card.changed { animation: flash 1.6s ease-out; }
+    @keyframes flash { 0% { box-shadow: 0 0 0 4px var(--accent); } 100% { box-shadow: 0 0 0 0 transparent; } }
+    .card.skeleton::after { animation: pulse 1.2s ease-in-out infinite alternate; }
+    @keyframes pulse { to { opacity: .4; } }
+  }
+
+  /* Phones: healthy devices shrink to one line so problems stand out and lists stay short */
+  @media (max-width: 599px) {
+    .card.compact { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center;
+      gap: 10px; padding: 10px 12px; }
+    .card.compact .card-top, .card.compact .card-bottom { display: contents; }
+    .card.compact .icon { font-size: 18px; }
+    .card.compact .pill { order: 4; margin-left: 0; }
+    .card.compact .latency { order: 3; font-size: 15px; }
+    .card.compact .age { display: none; }
+    .card.compact .ip { font-size: 12px; }
+  }
+
+  .incidents .inc { all: unset; box-sizing: border-box; width: 100%; padding: 10px 14px;
+    display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; }
+  .incidents button.inc { cursor: pointer; }
+  .incidents button.inc:hover { background: var(--bg); }
+  .incidents button.inc:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .incidents li.more { padding: 0; }
+  .incidents li.more button { all: unset; box-sizing: border-box; cursor: pointer; width: 100%; padding: 10px 14px;
+    color: var(--accent); font-weight: 600; font-size: 14px; text-align: center; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .updated.stale { color: var(--warn); font-weight: 600; }
+  .dlg-head .pill { margin-left: 0; }
+  .dlg-status { font-size: 14px; color: var(--muted); margin-bottom: 10px; }
+  .dlg-status.DOWN { color: var(--down); font-weight: 600; }
+  #dlg-tip { margin-bottom: 12px; }
 
   .incidents { list-style: none; margin: 0; padding: 0; background: var(--surface);
     border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
-  .incidents li { padding: 10px 14px; border-top: 1px solid var(--border);
-    display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; }
+  .incidents li { border-top: 1px solid var(--border); }
+  .incidents li.empty { padding: 14px; }
   .incidents li:first-child { border-top: 0; }
   .incidents .when { color: var(--muted); font-size: 13px; }
   .incidents .ongoing { color: var(--down); font-weight: 600; }
-  .empty { color: var(--muted); padding: 14px; }
+  .empty { color: var(--muted); }
 
   dialog {
     width: min(760px, calc(100vw - 24px)); max-height: calc(100vh - 24px);
@@ -124,7 +170,14 @@
   .chart-msg { color: var(--muted); padding: 40px 0; text-align: center; }
 
   /* ---------- manage devices ---------- */
-  .head-right { display: flex; align-items: center; gap: 12px; }
+  .head-right { display: flex; align-items: center; gap: 8px; }
+  .head-right .btn { white-space: nowrap; }
+  .title-block { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  @media (max-width: 599px) {
+    .title-block { flex-direction: column; gap: 0; }
+    .title-block .updated { font-size: 12px; }
+  }
+  .summary.stale { opacity: .55; }
   .btn {
     font: inherit; font-size: 14px; font-weight: 600; cursor: pointer;
     padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border);
@@ -136,7 +189,8 @@
   .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .btn.danger { color: var(--down); }
   .btn.small { font-size: 13px; padding: 5px 10px; }
-  .dev-list { list-style: none; margin: 0 0 14px; padding: 0; border: 1px solid var(--border); border-radius: 10px; }
+  .list-top { margin-bottom: 12px; }
+  .dev-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 10px; }
   .dev-list li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-top: 1px solid var(--border); }
   .dev-list li:first-child { border-top: 0; }
   .dev-list .grow { flex: 1; min-width: 0; }
@@ -162,9 +216,11 @@
 <body>
 <main>
   <header>
-    <h1>NetMon</h1>
-    <div class="head-right">
+    <div class="title-block">
+      <h1>NetMon</h1>
       <span class="updated" id="updated">Loading…</span>
+    </div>
+    <div class="head-right">
       <a class="btn small" id="report-link" href="report">Weekly report</a>
       <button class="btn small" id="manage-btn" hidden>Manage devices</button>
     </div>
@@ -173,7 +229,10 @@
 
   <div class="summary" id="summary"><span class="dot"></span><span id="summary-text">Loading devices…</span></div>
 
-  <div class="grid" id="grid"></div>
+  <div class="sr-only" id="announce" aria-live="assertive"></div>
+  <div class="grid" id="grid">
+    <div class="card skeleton" aria-hidden="true"></div><div class="card skeleton" aria-hidden="true"></div><div class="card skeleton" aria-hidden="true"></div>
+  </div>
 
   <h2>Recent incidents</h2>
   <ul class="incidents" id="incidents"><li class="empty">Loading…</li></ul>
@@ -183,9 +242,12 @@
   <div class="dlg-head">
     <span class="icon" id="dlg-icon"></span>
     <h3 id="dlg-title"></h3>
+    <span class="pill" id="dlg-pill"></span>
     <button class="close" id="dlg-close" aria-label="Close">✕</button>
   </div>
   <div class="dlg-body">
+    <div class="dlg-status" id="dlg-status"></div>
+    <div class="tip" id="dlg-tip" hidden><b>What to do</b><span></span></div>
     <div class="chart-wrap"><canvas id="chart"></canvas><div class="chart-msg" id="chart-msg" hidden></div></div>
     <div class="legend" id="legend"></div>
   </div>
@@ -200,11 +262,11 @@
   <div class="dlg-body">
     <!-- list view -->
     <div id="manage-list-view">
-      <ul class="dev-list" id="dev-list"></ul>
-      <div class="form-actions">
+      <div class="form-actions list-top">
         <button class="btn primary" id="add-btn">+ Add device</button>
-        <span class="msg" id="list-msg"></span>
+        <span class="msg" id="list-msg" role="status"></span>
       </div>
+      <ul class="dev-list" id="dev-list"></ul>
     </div>
 
     <!-- add / edit form -->
@@ -299,13 +361,23 @@ function ageNow(d) {
   return d.seconds_since_check + (performance.now() - fetchedAt) / 1000;
 }
 
-async function getJSON(url) {
-  const r = await fetch(url, { cache: "no-store" });
-  if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`);
-  return r.json();
+// Give up after a few seconds so a hung connection shows the "can't reach" banner
+// instead of leaving the page silently frozen.
+async function getJSON(url, timeoutMs = 8000) {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const r = await fetch(url, { cache: "no-store", signal: ctl.signal });
+    if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`);
+    return await r.json();
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 // ------------------------------------------------------------ rendering
+
+const FAVICON_COLORS = { bad: "#c62828", ok: "#1a7f4b", none: "#6b7280" };
 
 function renderSummary() {
   const box = $("summary");
@@ -317,8 +389,15 @@ function renderSummary() {
   let sub = "";
   if (down) sub = `${down} down`;
   if (unknown) sub += `${sub ? " · " : ""}${unknown} unknown`;
-  $("summary-text").innerHTML =
-    `${up} of ${devices.length} devices up` + (sub ? ` <span class="sub">(${esc(sub)})</span>` : "");
+  $("summary-text").innerHTML = devices.length
+    ? `${up} of ${devices.length} devices up` + (sub ? ` <span class="sub">(${esc(sub)})</span>` : "")
+    : "No devices yet";
+
+  // The browser tab shows the status too, for when the page is in the background.
+  document.title = down ? `(${down} down) NetMon` : "NetMon";
+  const color = FAVICON_COLORS[down ? "bad" : up && !unknown ? "ok" : "none"];
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='12' fill='${color}'/></svg>`;
+  $("favicon").href = "data:image/svg+xml," + encodeURIComponent(svg);
 }
 
 function cardNote(d) {
@@ -333,58 +412,168 @@ function cardNote(d) {
   return "";
 }
 
+// Cards are kept and updated in place rather than rebuilt on every refresh, so
+// nothing flickers, hover and keyboard focus survive, and only real changes move.
+const cards = new Map();    // device id -> card element
+const lastStatus = new Map(); // device id -> status seen on the previous refresh
+
+function setText(el, text) {
+  if (el.textContent !== text) el.textContent = text;
+}
+
+function createCard(id) {
+  const el = document.createElement("button");
+  el.className = "card";
+  el.dataset.id = id;
+  el.innerHTML = `
+    <div class="card-top">
+      <span class="icon" aria-hidden="true"></span>
+      <div class="who"><div class="name"></div><div class="ip"></div></div>
+      <span class="pill"></span>
+    </div>
+    <div class="note" hidden></div>
+    <div class="tip" hidden><b>What to do</b><span></span></div>
+    <div class="card-bottom"><span class="latency"></span><span class="age"></span></div>`;
+  const q = (sel) => el.querySelector(sel);
+  el._parts = { icon: q(".icon"), name: q(".name"), ip: q(".ip"), pill: q(".pill"), note: q(".note"),
+                tip: q(".tip"), tipText: q(".tip span"), latency: q(".latency"), age: q(".age") };
+  return el;
+}
+
+function updateCard(el, d) {
+  const p = el._parts;
+  const note = cardNote(d);
+  const warn = d.status !== "DOWN" && d.consecutive_failures > 0;
+  // On phones, healthy devices collapse to one line; anything needing attention stays full size.
+  const compact = d.status === "UP" && !warn;
+  const cls = `card ${d.status}${warn ? " warn" : ""}${compact ? " compact" : ""}`;
+  if (el.className.replace(" changed", "") !== cls) {
+    el.className = cls + (el.classList.contains("changed") ? " changed" : "");
+  }
+  setText(p.icon, ICONS[d.type] || "❔");
+  setText(p.name, d.name);
+  setText(p.ip, d.check_method === "tcp" ? `${d.ip}:${d.port}` : d.ip);
+  p.pill.className = `pill ${d.status}`;
+  setText(p.pill, d.status);
+  p.note.hidden = !note;
+  setText(p.note, note);
+  p.tip.hidden = !(d.status === "DOWN" && d.tip);
+  setText(p.tipText, d.tip || "");
+  // A down device has no latency to show; the tip takes that space.
+  p.latency.hidden = d.status === "DOWN";
+  setText(p.latency, fmtLatency(d.last_latency_ms));
+  el.setAttribute("aria-label", `${d.name}, ${d.status}${note ? `, ${note}` : ""}. Show latency chart`);
+}
+
+function flash(el) {
+  el.classList.remove("changed");
+  void el.offsetWidth; // restart the animation
+  el.classList.add("changed");
+  setTimeout(() => el.classList.remove("changed"), 1700);
+}
+
 function renderGrid() {
+  const grid = $("grid");
+  grid.querySelectorAll(".skeleton").forEach((el) => el.remove());
   const sorted = [...devices].sort(
     (a, b) => STATUS_ORDER[a.status] - STATUS_ORDER[b.status] || a.name.localeCompare(b.name)
   );
-  $("grid").innerHTML = sorted.map((d) => {
-    const addr = d.check_method === "tcp" ? `${d.ip}:${d.port}` : d.ip;
-    const note = cardNote(d);
-    return `
-      <button class="card ${d.status}" data-id="${d.id}" aria-label="${esc(d.name)}, ${d.status}. Show latency chart">
-        <div class="card-top">
-          <span class="icon" aria-hidden="true">${ICONS[d.type] || "❔"}</span>
-          <div><div class="name">${esc(d.name)}</div><div class="ip">${esc(addr)}</div></div>
-          <span class="pill ${d.status}">${d.status}</span>
-        </div>
-        ${note ? `<div class="note">${esc(note)}</div>` : ""}
-        <div class="card-bottom">
-          <span class="latency">${d.status === "DOWN" ? "—" : fmtLatency(d.last_latency_ms)}</span>
-          <span class="age" data-id="${d.id}"></span>
-        </div>
-      </button>`;
-  }).join("");
+  const seen = new Set();
+  const changes = [];
+  for (const d of sorted) {
+    seen.add(d.id);
+    let el = cards.get(d.id);
+    if (!el) { el = createCard(d.id); cards.set(d.id, el); }
+    updateCard(el, d);
+    const before = lastStatus.get(d.id);
+    if (before && before !== d.status) {
+      flash(el);
+      changes.push(`${d.name} is ${d.status === "UP" ? "back up" : d.status.toLowerCase()}`);
+    }
+    lastStatus.set(d.id, d.status);
+  }
+  for (const [id, el] of cards) {
+    if (!seen.has(id)) { el.remove(); cards.delete(id); lastStatus.delete(id); }
+  }
+
+  // Put cards in order, moving only the ones that are out of place.
+  const focused = document.activeElement;
+  let ref = grid.firstElementChild;
+  for (const d of sorted) {
+    const el = cards.get(d.id);
+    if (el === ref) ref = ref.nextElementSibling;
+    else grid.insertBefore(el, ref);
+  }
+  if (focused && focused !== document.activeElement && grid.contains(focused)) focused.focus();
+
+  if (!sorted.length && !grid.querySelector(".empty")) {
+    grid.innerHTML = `<p class="empty">No devices are being watched yet.` +
+      (canEdit ? ` Click <b>Manage devices</b> to add your router, printers and tablets.` : "") + `</p>`;
+  } else if (sorted.length) {
+    grid.querySelector(".empty")?.remove();
+  }
+  if (changes.length) setText($("announce"), changes.join(". "));
   tickAges();
 }
 
 function tickAges() {
-  for (const el of document.querySelectorAll(".age")) {
-    const d = devices.find((x) => x.id === Number(el.dataset.id));
-    const age = d && ageNow(d);
-    el.textContent = age == null ? "Not checked yet" : `Checked ${fmtDuration(age)} ago`;
+  for (const d of devices) {
+    const el = cards.get(d.id);
+    if (!el) continue;
+    const age = ageNow(d);
+    setText(el._parts.age, age == null ? "Not checked yet" : `Checked ${fmtDuration(age)} ago`);
+    const note = cardNote(d); // "Down for ..." keeps counting between refreshes
+    if (note) setText(el._parts.note, note);
   }
-  $("updated").textContent = lastOkAt == null
-    ? "Loading…"
-    : `Updated ${fmtDuration((Date.now() - lastOkAt) / 1000)} ago`;
+  const upd = $("updated");
+  if (lastOkAt == null) {
+    setText(upd, failures ? "Can't reach NetMon" : "Loading…");
+  } else {
+    const age = (Date.now() - lastOkAt) / 1000;
+    setText(upd, `Updated ${fmtDuration(age)} ago`);
+    upd.classList.toggle("stale", age > REFRESH_MS / 1000 * 2.5);
+  }
 }
 
-function renderIncidents(list) {
+const INCIDENTS_SHOWN = 8;
+let incidents = [];
+let showAllIncidents = false;
+
+function renderIncidents() {
   const ul = $("incidents");
-  if (!list.length) {
+  if (!incidents.length) {
     ul.innerHTML = `<li class="empty">No incidents yet. 🎉</li>`;
     return;
   }
-  ul.innerHTML = list.map((i) => `
-    <li>
+  const list = showAllIncidents ? incidents : incidents.slice(0, INCIDENTS_SHOWN);
+  const active = new Set(devices.map((d) => d.id));
+  ul.innerHTML = list.map((i) => {
+    const body = `
       <span>${ICONS[i.device_type] || "❔"} <strong>${esc(i.device_name)}</strong></span>
       <span class="when">
         ${fmtTime(i.started_at)} ·
         ${i.ongoing
           ? `<span class="ongoing">Ongoing, ${fmtDuration(i.duration_s)}</span>`
           : `down ${fmtDuration(i.duration_s)}`}
-      </span>
-    </li>`).join("");
+      </span>`;
+    // Removed devices have no live chart to open.
+    return active.has(i.device_id)
+      ? `<li><button class="inc" data-device="${i.device_id}" aria-label="${esc(i.device_name)}: show chart">${body}</button></li>`
+      : `<li><div class="inc">${body}</div></li>`;
+  }).join("") + (incidents.length > INCIDENTS_SHOWN
+    ? `<li class="more"><button id="more-incidents">${showAllIncidents ? "Show fewer" : `Show all ${incidents.length}`}</button></li>`
+    : "");
 }
+
+$("incidents").addEventListener("click", (e) => {
+  if (e.target.closest("#more-incidents")) {
+    showAllIncidents = !showAllIncidents;
+    renderIncidents();
+    return;
+  }
+  const row = e.target.closest("button.inc");
+  if (row) openDetail(Number(row.dataset.device));
+});
 
 // ------------------------------------------------------------ chart
 
@@ -419,12 +608,15 @@ async function loadChart(id) {
   }
   canvas.hidden = false; msg.hidden = true;
 
+  chartLoadedAt = performance.now();
   const ok = pts.filter((p) => p.up).map((p) => p.y);
   const failed = pts.filter((p) => !p.up);
   const avg = ok.length ? ok.reduce((a, b) => a + b, 0) / ok.length : null;
   const uptime = (ok.length / pts.length) * 100;
+  // Round down, so 99.97% never shows as "100%" when checks actually failed.
+  const uptimeText = uptime === 100 ? "100" : (Math.floor(uptime * 10) / 10).toFixed(1);
   $("legend").innerHTML =
-    `<span>Uptime (24h): <strong>${uptime.toFixed(uptime === 100 ? 0 : 1)}%</strong></span>` +
+    `<span>Uptime (24h): <strong>${uptimeText}%</strong></span>` +
     `<span>Avg latency: <strong>${fmtLatency(avg)}</strong></span>` +
     (failed.length
       ? `<span class="fail">✕ ${failed.length} failed check${failed.length === 1 ? "" : "s"}</span>`
@@ -478,16 +670,51 @@ async function loadChart(id) {
       },
     },
   };
+  // Same device already drawn: swap the data in place, so the chart doesn't
+  // flicker and a tooltip being read isn't wiped out.
+  if (chart && chart.$deviceId === id) {
+    chart.data.datasets[0].data = line;
+    chart.data.datasets[0].pointRadius = config.data.datasets[0].pointRadius;
+    chart.data.datasets[1].data = fails;
+    chart.options.scales.x.min = min;
+    chart.options.scales.x.max = now;
+    chart.options.scales.x.afterBuildTicks = roundTicks;
+    chart.update("none");
+    return;
+  }
   if (chart) chart.destroy();
   chart = new Chart(canvas, config);
+  chart.$deviceId = id;
+}
+
+function renderDetailHead() {
+  const d = devices.find((x) => x.id === openDeviceId);
+  if (!d) return;
+  $("dlg-icon").textContent = ICONS[d.type] || "❔";
+  setText($("dlg-title"), `${d.name}: last 24 hours`);
+  $("dlg-pill").className = `pill ${d.status}`;
+  setText($("dlg-pill"), d.status);
+  const addr = d.check_method === "tcp" ? `${d.ip}, port ${d.port}` : d.ip;
+  let status;
+  if (d.status === "DOWN" && d.failing_since) {
+    const since = new Date(d.failing_since).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    status = `Not responding since ${since} · ${addr}`;
+  } else if (d.status === "UP") {
+    status = `Responding in ${fmtLatency(d.last_latency_ms)} · ${addr}`;
+  } else {
+    status = `Waiting for the first successful check · ${addr}`;
+  }
+  $("dlg-status").className = `dlg-status ${d.status}`;
+  setText($("dlg-status"), status);
+  $("dlg-tip").hidden = !(d.status === "DOWN" && d.tip);
+  setText($("dlg-tip").querySelector("span"), d.tip || "");
 }
 
 function openDetail(id) {
   const d = devices.find((x) => x.id === id);
   if (!d) return;
   openDeviceId = id;
-  $("dlg-icon").textContent = ICONS[d.type] || "❔";
-  $("dlg-title").textContent = `${d.name}: last 24 hours`;
+  renderDetailHead();
   const dlg = $("detail");
   if (!dlg.open) dlg.showModal();
   loadChart(id);
@@ -677,25 +904,57 @@ $("cancel-btn").addEventListener("click", showList);
 $("manage-close").addEventListener("click", () => $("manage").close());
 
 // Only the NetMon computer itself may change devices; phones just view.
-getJSON("/api/meta").then((m) => { $("manage-btn").hidden = !m.can_edit; }).catch(() => {});
+let canEdit = false;
+getJSON("/api/meta").then((m) => {
+  canEdit = m.can_edit;
+  $("manage-btn").hidden = !canEdit;
+  if (!devices.length && lastOkAt != null) renderGrid();
+}).catch(() => {});
 
 // ------------------------------------------------------------ refresh loop
 
-async function refresh() {
+const CHART_REFRESH_MS = 30000; // history changes slowly; no need to refetch 24 h every 10 s
+let chartLoadedAt = 0;
+let failures = 0;      // consecutive failed refreshes
+let inFlight = null;   // never run two refreshes at once
+
+function refresh() {
+  if (!inFlight) inFlight = doRefresh().finally(() => { inFlight = null; });
+  return inFlight;
+}
+
+async function doRefresh() {
   try {
     const [devs, incs] = await Promise.all([getJSON("/api/devices"), getJSON("/api/incidents?limit=50")]);
     devices = devs;
+    incidents = incs;
     fetchedAt = performance.now();
     lastOkAt = Date.now();
+    failures = 0;
     $("banner").classList.remove("show");
+    $("grid").classList.remove("stale");
+    $("summary").classList.remove("stale");
     renderSummary();
     renderGrid();
-    renderIncidents(incs);
-    if (openDeviceId != null) loadChart(openDeviceId);
+    renderIncidents();
+    if (openDeviceId != null) {
+      renderDetailHead();
+      if (performance.now() - chartLoadedAt > CHART_REFRESH_MS) loadChart(openDeviceId);
+    }
     if ($("manage").open && !$("manage-list-view").hidden) renderDevList();
   } catch (err) {
     console.error(err);
-    $("banner").classList.add("show");
+    failures += 1;
+    // One blip isn't worth alarming anyone; two in a row (or never loaded) is.
+    if (failures >= 2 || lastOkAt == null) {
+      const since = lastOkAt == null ? "" : ` since ${new Date(lastOkAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+      $("banner").textContent = `Can't reach NetMon${since}. Status below may be out of date.`;
+      $("banner").classList.add("show");
+      $("grid").classList.add("stale");
+      $("summary").classList.add("stale");
+      document.title = "(offline) NetMon";
+    }
+    tickAges();
   }
 }
 

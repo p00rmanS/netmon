@@ -138,14 +138,19 @@ The dashboard has no password, so only use `--lan` on a network you trust
 ## 4. Using the dashboard
 
 - **Top bar**: "12 of 14 devices up". It turns red when anything is down.
-- **Cards**: one per device. Down devices always sort to the top.
-  "2 missed checks" in yellow means the device is struggling but hasn't hit
-  the 3-strike limit yet.
+- **Cards**: one per device. Down devices always sort to the top and show
+  **what to do** (e.g. "check the printer has paper"). A yellow edge and
+  "2 missed checks" means the device is struggling but hasn't hit the
+  3-strike limit yet. On a phone, healthy devices shrink to one line so
+  problems stand out.
 - **Tap a card** for a 24-hour latency chart. Red ✕ marks are failed checks.
 - **Recent incidents**: each outage, when it started, and how long it lasted.
+  Tap one to see that device's chart.
+- The **browser tab** shows "(1 down) NetMon" and a red dot when something is
+  down, so you notice even when the tab is in the background.
 - The page refreshes itself every 10 seconds. If the red "Can't reach NetMon"
-  banner appears, NetMon on the laptop has stopped or the laptop is off
-  the network.
+  banner appears, the NetMon computer has stopped or is off the network, and
+  the faded cards are only the last known status.
 
 ### The weekly report
 

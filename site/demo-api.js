@@ -29,6 +29,11 @@
     [7, 3 * 1440 + 200, 8],   // Bar Printer, 3 days ago
     [2, 5 * 1440 + 90, 14],   // Internet, 5 days ago
   ];
+  // Same wording as the real app's tips (netmon/alerts.py), for devices that can go down in the demo.
+  const TIPS = {
+    printer: "Check the printer is on, has paper, and its lid is closed. If it is, " +
+             "switch it off and on. Until then, read orders from the POS screen.",
+  };
   // The week before, for the report's comparison: more outages, more downtime.
   const PREVIOUS_WEEK = { outages: 7, downtime_s: 71 * 60 };
 
@@ -71,6 +76,7 @@
         seconds_since_check: +since.toFixed(1),
         failing_since: down ? iso(failingSince) : null,
         seconds_failing: down ? +((now - failingSince) / 1000).toFixed(1) : null,
+        tip: down ? TIPS[d.type] || null : null,
       };
     });
   }

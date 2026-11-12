@@ -79,3 +79,13 @@ def test_health_ok_then_stuck(client):
     client.monitor.last_cycle_at = time.time() - 3600  # loop hasn't run for an hour
     r = client.get("/api/health")
     assert r.status_code == 503 and r.json()["ok"] is False
+
+
+def test_down_device_carries_what_to_do_tip(client):
+    now = time.time()
+    printer = next(d for d in client.get("/api/devices").json() if d["name"] == "Printer")
+    assert printer["tip"] is None
+    for t in (now - 90, now - 60, now - 30):
+        client.monitor.record(printer["id"], CheckResult(False, None), t)
+    printer = next(d for d in client.get("/api/devices").json() if d["name"] == "Printer")
+    assert printer["status"] == "DOWN" and "paper" in printer["tip"]

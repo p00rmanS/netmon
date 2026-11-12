@@ -22,8 +22,8 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from .alerts import (
-    DEFAULT_ALERTS_PATH, Alert, AlertConfigError, AlertSender, build_alert, build_started_alert,
-    deliver, load_alert_config,
+    DEFAULT_ALERTS_PATH, TIPS, Alert, AlertConfigError, AlertSender, build_alert,
+    build_started_alert, deliver, load_alert_config,
 )
 from .checker import run_check
 from .config import (
@@ -85,6 +85,8 @@ def device_json(rt: DeviceRuntime, now: float) -> dict:
         "seconds_since_check": None if rt.last_checked is None else round(now - rt.last_checked, 1),
         "failing_since": iso(s.first_failure_at),
         "seconds_failing": None if s.first_failure_at is None else round(now - s.first_failure_at, 1),
+        # What staff can try, shown on the card while it's down.
+        "tip": TIPS.get(d.type) if s.status.value == "DOWN" else None,
     }
 
 
